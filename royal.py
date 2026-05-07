@@ -66,7 +66,6 @@ daily_limit = random.randint(
 
 last_reset_date = datetime.now(IST).date()
 
-
 # =========================
 # ACTIVE HOURS CHECK
 # =========================
@@ -89,7 +88,7 @@ def active_hours():
 
 # =========================
 # DAILY RESET
-# RESET BETWEEN 5:00-6:00 AM
+# RESET BETWEEN 5-6 AM
 # =========================
 def reset_daily():
 
@@ -155,7 +154,7 @@ def get_dynamic_delay():
         )
     )
 
-    # IF SLOW -> FAST DELAY
+    # FAST MODE IF LOW
     if approved_today < expected:
 
         delay = random.choice([
@@ -166,7 +165,7 @@ def get_dynamic_delay():
             600,
         ])
 
-    # NORMAL RANDOM DELAY
+    # NORMAL RANDOM
     else:
 
         delay = random.choice(
@@ -199,7 +198,7 @@ async def channel_worker(
 
             await asyncio.sleep(60)
 
-        # DAILY LIMIT REACHED
+        # DAILY LIMIT
         if approved_today >= daily_limit:
 
             print(
@@ -212,6 +211,7 @@ async def channel_worker(
 
             continue
 
+        # GET FIRST USER
         data = channel_queues[
             channel_id
         ].pop(0)
@@ -220,12 +220,15 @@ async def channel_worker(
         user_name = data["user_name"]
         channel_name = data["channel_name"]
 
+        # RANDOM DELAY
         delay = get_dynamic_delay()
+
+        minutes = round(delay / 60, 1)
 
         print(
             f"⏳ [{channel_name}] "
-            f"Waiting {delay}s "
-            f"for {user_name}"
+            f"{user_name} waiting "
+            f"{minutes} min"
         )
 
         await asyncio.sleep(delay)
@@ -303,7 +306,7 @@ async def handle_request(
             channel_id
         ] = []
 
-    # ADD TO QUEUE
+    # ADD USER
     channel_queues[
         channel_id
     ].append({
