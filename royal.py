@@ -1,6 +1,8 @@
 import random
 import asyncio
+
 from datetime import datetime, time
+from zoneinfo import ZoneInfo
 
 from telegram import Update
 from telegram.ext import (
@@ -9,7 +11,15 @@ from telegram.ext import (
     ContextTypes,
 )
 
+# =========================
+# BOT TOKEN
+# =========================
 TOKEN = "8762342325:AAEB5kalMTloqqeTySjUKxjAeKDJpsAzy4U"
+
+# =========================
+# INDIA TIMEZONE
+# =========================
+IST = ZoneInfo("Asia/Kolkata")
 
 # =========================
 # DAILY LIMIT
@@ -29,7 +39,7 @@ END_MINUTE = 59
 
 # =========================
 # RANDOM DELAY POOL
-# (seconds)
+# (SECONDS)
 # =========================
 DELAY_POOL = [
     120,   # 2 min
@@ -48,27 +58,38 @@ channel_queues = {}
 running_workers = set()
 
 approved_today = 0
-daily_limit = random.randint(DAILY_MIN, DAILY_MAX)
 
-last_reset_date = datetime.now().date()
+daily_limit = random.randint(
+    DAILY_MIN,
+    DAILY_MAX
+)
+
+last_reset_date = datetime.now(IST).date()
 
 
 # =========================
-# CHECK ACTIVE HOURS
+# ACTIVE HOURS CHECK
 # =========================
 def active_hours():
 
-    now = datetime.now().time()
+    now = datetime.now(IST).time()
 
-    start = time(START_HOUR, START_MINUTE)
-    end = time(END_HOUR, END_MINUTE)
+    start = time(
+        START_HOUR,
+        START_MINUTE
+    )
+
+    end = time(
+        END_HOUR,
+        END_MINUTE
+    )
 
     return start <= now <= end
 
 
 # =========================
 # DAILY RESET
-# RESET BETWEEN 5:00 - 6:00 AM
+# RESET BETWEEN 5:00-6:00 AM
 # =========================
 def reset_daily():
 
@@ -76,7 +97,7 @@ def reset_daily():
     global daily_limit
     global last_reset_date
 
-    now = datetime.now()
+    now = datetime.now(IST)
 
     reset_start = time(5, 0)
     reset_end = time(6, 0)
@@ -96,7 +117,8 @@ def reset_daily():
         last_reset_date = now.date()
 
         print(
-            f"🔄 Daily Reset | New Limit: {daily_limit}"
+            f"🔄 Daily Reset | "
+            f"New Limit: {daily_limit}"
         )
 
 
@@ -105,27 +127,35 @@ def reset_daily():
 # =========================
 def get_dynamic_delay():
 
-    now = datetime.now()
+    now = datetime.now(IST)
 
-    # total active minutes
+    # ACTIVE WINDOW
     start_minutes = 5 * 60 + 30
     end_minutes = 24 * 60
 
-    total_minutes = end_minutes - start_minutes
+    total_minutes = (
+        end_minutes - start_minutes
+    )
 
     current_minutes = (
         now.hour * 60 + now.minute
     ) - start_minutes
 
-    current_minutes = max(current_minutes, 1)
-
-    # expected approvals till now
-    expected = (
-        daily_limit *
-        (current_minutes / total_minutes)
+    current_minutes = max(
+        current_minutes,
+        1
     )
 
-    # if approvals low -> faster
+    # EXPECTED APPROVALS
+    expected = (
+        daily_limit *
+        (
+            current_minutes /
+            total_minutes
+        )
+    )
+
+    # IF SLOW -> FAST DELAY
     if approved_today < expected:
 
         delay = random.choice([
@@ -136,10 +166,12 @@ def get_dynamic_delay():
             600,
         ])
 
-    # if approvals good -> slower
+    # NORMAL RANDOM DELAY
     else:
 
-        delay = random.choice(DELAY_POOL)
+        delay = random.choice(
+            DELAY_POOL
+        )
 
     return delay
 
@@ -147,7 +179,10 @@ def get_dynamic_delay():
 # =========================
 # CHANNEL WORKER
 # =========================
-async def channel_worker(channel_id, context):
+async def channel_worker(
+    channel_id,
+    context
+):
 
     global approved_today
 
@@ -155,24 +190,31 @@ async def channel_worker(channel_id, context):
 
         reset_daily()
 
-        # STOP NIGHT TIME
+        # NIGHT MODE
         while not active_hours():
 
-            print("🌙 Night Mode Active")
+            print(
+                "🌙 Night Mode Active"
+            )
+
             await asyncio.sleep(60)
 
         # DAILY LIMIT REACHED
         if approved_today >= daily_limit:
 
             print(
-                f"⛔ Daily Limit Reached: "
-                f"{approved_today}/{daily_limit}"
+                f"⛔ Daily Limit Reached "
+                f"{approved_today}/"
+                f"{daily_limit}"
             )
 
             await asyncio.sleep(300)
+
             continue
 
-        data = channel_queues[channel_id].pop(0)
+        data = channel_queues[
+            channel_id
+        ].pop(0)
 
         user_id = data["user_id"]
         user_name = data["user_name"]
@@ -198,20 +240,25 @@ async def channel_worker(channel_id, context):
             approved_today += 1
 
             print(
-                f"✅ Approved {user_name} "
+                f"✅ Approved "
+                f"{user_name} "
                 f"in {channel_name} "
                 f"| Today: "
-                f"{approved_today}/{daily_limit}"
+                f"{approved_today}/"
+                f"{daily_limit}"
             )
 
         except Exception as e:
 
             print(
-                f"❌ Error in "
-                f"{channel_name}: {e}"
+                f"❌ Error "
+                f"in {channel_name}: "
+                f"{e}"
             )
 
-    running_workers.remove(channel_id)
+    running_workers.remove(
+        channel_id
+    )
 
     print(
         f"🛑 Worker stopped "
@@ -220,15 +267,22 @@ async def channel_worker(channel_id, context):
 
 
 # =========================
-# HANDLE REQUEST
+# JOIN REQUEST HANDLER
 # =========================
 async def handle_request(
     update: Update,
     context: ContextTypes.DEFAULT_TYPE
 ):
 
-    user = update.chat_join_request.from_user
-    channel = update.chat_join_request.chat
+    user = (
+        update.chat_join_request
+        .from_user
+    )
+
+    channel = (
+        update.chat_join_request
+        .chat
+    )
 
     user_id = user.id
     user_name = user.full_name
@@ -238,16 +292,21 @@ async def handle_request(
 
     print(
         f"📥 New Request: "
-        f"{user_name} -> {channel_name}"
+        f"{user_name} -> "
+        f"{channel_name}"
     )
 
     # CREATE QUEUE
     if channel_id not in channel_queues:
 
-        channel_queues[channel_id] = []
+        channel_queues[
+            channel_id
+        ] = []
 
     # ADD TO QUEUE
-    channel_queues[channel_id].append({
+    channel_queues[
+        channel_id
+    ].append({
 
         "user_id": user_id,
         "user_name": user_name,
@@ -258,7 +317,9 @@ async def handle_request(
     # START WORKER
     if channel_id not in running_workers:
 
-        running_workers.add(channel_id)
+        running_workers.add(
+            channel_id
+        )
 
         asyncio.create_task(
             channel_worker(
@@ -269,11 +330,13 @@ async def handle_request(
 
 
 # =========================
-# APP
+# START APP
 # =========================
-app = ApplicationBuilder().token(
-    TOKEN
-).build()
+app = (
+    ApplicationBuilder()
+    .token(TOKEN)
+    .build()
+)
 
 app.add_handler(
     ChatJoinRequestHandler(
