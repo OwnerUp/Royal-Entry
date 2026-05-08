@@ -9,90 +9,51 @@ from telegram.ext import (
     ApplicationBuilder,
     ChatJoinRequestHandler,
     ContextTypes,
+    CommandHandler,
 )
 
-# =========================
+# =====================================================
 # BOT TOKEN
-# =========================
+# =====================================================
 TOKEN = "8762342325:AAEB5kalMTloqqeTySjUKxjAeKDJpsAzy4U"
 
-# =========================
+# =====================================================
 # INDIA TIMEZONE
-# =========================
+# =====================================================
 IST = ZoneInfo("Asia/Kolkata")
 
-# =========================
+# =====================================================
 # DAILY LIMIT
-# =========================
+# =====================================================
 DAILY_MIN = 60
 DAILY_MAX = 90
 
-# =========================
-# ACTIVE TIME
-# 5:30 AM -> 12:00 AM
-# =========================
-START_HOUR = 5
-START_MINUTE = 30
-
-END_HOUR = 23
-END_MINUTE = 59
-
-# =========================
-# RANDOM DELAY POOL
-# (SECONDS)
-# =========================
-DELAY_POOL = [
-    120,   # 2 min
-    240,   # 4 min
-    360,   # 6 min
-    480,   # 8 min
-    900,   # 15 min
-    1800,  # 30 min
-    2700,  # 45 min
-]
-
-# =========================
+# =====================================================
 # STORAGE
-# =========================
+# =====================================================
 channel_queues = {}
 running_workers = set()
 
 approved_today = 0
+approved_users = set()
 
 daily_limit = random.randint(
     DAILY_MIN,
     DAILY_MAX
 )
 
-last_reset_date = datetime.now(IST).date()
+last_reset_date = datetime.now(
+    IST
+).date()
 
-# =========================
-# ACTIVE HOURS CHECK
-# =========================
-def active_hours():
-
-    now = datetime.now(IST).time()
-
-    start = time(
-        START_HOUR,
-        START_MINUTE
-    )
-
-    end = time(
-        END_HOUR,
-        END_MINUTE
-    )
-
-    return start <= now <= end
-
-
-# =========================
-# DAILY RESET
-# RESET BETWEEN 5-6 AM
-# =========================
+# =====================================================
+# RESET DAILY
+# 5 AM - 6 AM
+# =====================================================
 def reset_daily():
 
     global approved_today
+    global approved_users
     global daily_limit
     global last_reset_date
 
@@ -108,6 +69,8 @@ def reset_daily():
 
         approved_today = 0
 
+        approved_users.clear()
+
         daily_limit = random.randint(
             DAILY_MIN,
             DAILY_MAX
@@ -116,68 +79,67 @@ def reset_daily():
         last_reset_date = now.date()
 
         print(
-            f"🔄 Daily Reset | "
-            f"New Limit: {daily_limit}"
+            f"🔄 Daily Reset "
+            f"| New Limit: {daily_limit}"
         )
 
-
-# =========================
-# DYNAMIC DELAY
-# =========================
+# =====================================================
+# SMART DELAY SYSTEM
+# =====================================================
 def get_dynamic_delay():
 
     now = datetime.now(IST)
 
-    # ACTIVE WINDOW
-    start_minutes = 5 * 60 + 30
-    end_minutes = 24 * 60
+    current_hour = now.hour
 
-    total_minutes = (
-        end_minutes - start_minutes
-    )
+    # =================================================
+    # FAST MODE
+    # 6 AM -> 1 PM
+    # =================================================
+    if 6 <= current_hour < 13:
 
-    current_minutes = (
-        now.hour * 60 + now.minute
-    ) - start_minutes
+        if approved_today < 40:
 
-    current_minutes = max(
-        current_minutes,
-        1
-    )
+            return random.choice([
+                120,   # 2m
+                180,   # 3m
+                240,   # 4m
+                300,   # 5m
+                420,   # 7m
+                600,   # 10m
+            ])
 
-    # EXPECTED APPROVALS
-    expected = (
-        daily_limit *
-        (
-            current_minutes /
-            total_minutes
-        )
-    )
+    # =================================================
+    # MEDIUM MODE
+    # 1 PM -> 12 AM
+    # =================================================
+    elif 13 <= current_hour < 24:
 
-    # FAST MODE IF LOW
-    if approved_today < expected:
-
-        delay = random.choice([
-            120,
-            240,
-            360,
-            480,
-            600,
+        return random.choice([
+            900,    # 15m
+            1200,   # 20m
+            1800,   # 30m
+            2400,   # 40m
+            2700,   # 45m
+            3600,   # 60m
         ])
 
-    # NORMAL RANDOM
+    # =================================================
+    # NIGHT GHOST MODE
+    # 12 AM -> 5 AM
+    # =================================================
     else:
 
-        delay = random.choice(
-            DELAY_POOL
-        )
+        return random.choice([
+            3600,   # 1h
+            5400,   # 1.5h
+            7200,   # 2h
+            10800,  # 3h
+        ])
 
-    return delay
-
-
-# =========================
+# =====================================================
 # CHANNEL WORKER
-# =========================
+# =====================================================
 async def channel_worker(
     channel_id,
     context
@@ -189,29 +151,23 @@ async def channel_worker(
 
         reset_daily()
 
-        # NIGHT MODE
-        while not active_hours():
-
-            print(
-                "🌙 Night Mode Active"
-            )
-
-            await asyncio.sleep(60)
-
+        # =============================================
         # DAILY LIMIT
+        # =============================================
         if approved_today >= daily_limit:
 
             print(
-                f"⛔ Daily Limit Reached "
-                f"{approved_today}/"
-                f"{daily_limit}"
+                f"🚫 Daily Limit Reached "
+                f"{approved_today}/{daily_limit}"
             )
 
-            await asyncio.sleep(300)
+            await asyncio.sleep(600)
 
             continue
 
-        # GET FIRST USER
+        # =============================================
+        # GET USER
+        # =============================================
         data = channel_queues[
             channel_id
         ].pop(0)
@@ -220,10 +176,31 @@ async def channel_worker(
         user_name = data["user_name"]
         channel_name = data["channel_name"]
 
+        # =============================================
+        # DUPLICATE PROTECTION
+        # =============================================
+        unique_key = (
+            f"{channel_id}_{user_id}"
+        )
+
+        if unique_key in approved_users:
+
+            print(
+                f"⚠️ Duplicate Skipped "
+                f"{user_name}"
+            )
+
+            continue
+
+        # =============================================
         # RANDOM DELAY
+        # =============================================
         delay = get_dynamic_delay()
 
-        minutes = round(delay / 60, 1)
+        minutes = round(
+            delay / 60,
+            1
+        )
 
         print(
             f"⏳ [{channel_name}] "
@@ -233,11 +210,18 @@ async def channel_worker(
 
         await asyncio.sleep(delay)
 
+        # =============================================
+        # APPROVE USER
+        # =============================================
         try:
 
             await context.bot.approve_chat_join_request(
                 chat_id=channel_id,
                 user_id=user_id
+            )
+
+            approved_users.add(
+                unique_key
             )
 
             approved_today += 1
@@ -268,10 +252,9 @@ async def channel_worker(
         f"for {channel_id}"
     )
 
-
-# =========================
+# =====================================================
 # JOIN REQUEST HANDLER
-# =========================
+# =====================================================
 async def handle_request(
     update: Update,
     context: ContextTypes.DEFAULT_TYPE
@@ -299,14 +282,18 @@ async def handle_request(
         f"{channel_name}"
     )
 
-    # CREATE QUEUE
+    # =============================================
+    # CREATE CHANNEL QUEUE
+    # =============================================
     if channel_id not in channel_queues:
 
         channel_queues[
             channel_id
         ] = []
 
+    # =============================================
     # ADD USER
+    # =============================================
     channel_queues[
         channel_id
     ].append({
@@ -317,7 +304,9 @@ async def handle_request(
 
     })
 
+    # =============================================
     # START WORKER
+    # =============================================
     if channel_id not in running_workers:
 
         running_workers.add(
@@ -331,10 +320,21 @@ async def handle_request(
             )
         )
 
+# =====================================================
+# START COMMAND
+# =====================================================
+async def start_command(
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE
+):
 
-# =========================
-# START APP
-# =========================
+    await update.message.reply_text(
+        "Hello Sir 👋"
+    )
+
+# =====================================================
+# START BOT
+# =====================================================
 app = (
     ApplicationBuilder()
     .token(TOKEN)
@@ -344,6 +344,13 @@ app = (
 app.add_handler(
     ChatJoinRequestHandler(
         handle_request
+    )
+)
+
+app.add_handler(
+    CommandHandler(
+        "start",
+        start_command
     )
 )
 
