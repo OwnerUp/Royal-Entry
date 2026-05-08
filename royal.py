@@ -125,7 +125,7 @@ def get_dynamic_delay():
         ])
 
     # =================================================
-    # NIGHT GHOST MODE
+    # NIGHT MODE
     # 12 AM -> 5 AM
     # =================================================
     else:
@@ -355,11 +355,15 @@ app.add_handler(
 )
 
 print(
-    "🚀 Smart Human-Like "
-    "Multi-Channel Bot Started..."
+    "🚀 Smart Human-Like Multi-Channel Bot Started..."
 )
 
 app.run_polling(
     drop_pending_updates=True,
-    close_loop=False
+    close_loop=False,
+    timeout=60,
+    read_timeout=60,
+    write_timeout=60,
+    connect_timeout=60,
+    pool_timeout=60,
 )
