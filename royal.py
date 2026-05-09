@@ -1,10 +1,9 @@
-```python
 import random
 import asyncio
 import json
 import os
 
-from datetime import datetime, time
+from datetime import datetime
 from zoneinfo import ZoneInfo
 
 from telegram import Update
@@ -18,37 +17,44 @@ from telegram.ext import (
 # =====================================================
 # BOT TOKEN
 # =====================================================
+
 TOKEN = "8762342325:AAEB5kalMTloqqeTySjUKxjAeKDJpsAzy4U"
 
 # =====================================================
 # TIMEZONE
 # =====================================================
+
 IST = ZoneInfo("Asia/Kolkata")
 
 # =====================================================
 # DAILY LIMIT
 # =====================================================
+
 DAILY_MIN = 70
 DAILY_MAX = 90
 
 # =====================================================
 # DATABASE FILE
 # =====================================================
+
 DB_FILE = "queue_data.json"
 
 # =====================================================
 # BOT VERSION
 # =====================================================
+
 BOT_VERSION = "v4.0"
 
 # =====================================================
 # LAST UPDATE TIME
 # =====================================================
+
 LAST_UPDATE_TIME = datetime.now(IST)
 
 # =====================================================
 # STORAGE
 # =====================================================
+
 channel_queues = {}
 running_workers = set()
 
@@ -66,6 +72,7 @@ last_reset_date = datetime.now(
 # =====================================================
 # LOAD DATABASE
 # =====================================================
+
 def load_database():
 
     global channel_queues
@@ -113,6 +120,7 @@ def load_database():
 # =====================================================
 # SAVE DATABASE
 # =====================================================
+
 def save_database():
 
     data = {
@@ -140,6 +148,7 @@ def save_database():
 # =====================================================
 # RESET DAILY
 # =====================================================
+
 def reset_daily():
 
     global approved_today
@@ -173,6 +182,7 @@ def reset_daily():
 # =====================================================
 # TOTAL PENDING USERS
 # =====================================================
+
 def total_pending_users():
 
     total = 0
@@ -186,6 +196,7 @@ def total_pending_users():
 # =====================================================
 # SMART DELAY SYSTEM
 # =====================================================
+
 def get_dynamic_delay():
 
     now = datetime.now(IST)
@@ -197,6 +208,7 @@ def get_dynamic_delay():
     # =================================================
     # TARGET SYSTEM
     # =================================================
+
     if current_hour < 13:
 
         target_now = 40
@@ -218,8 +230,9 @@ def get_dynamic_delay():
         target_now = daily_limit
 
     # =================================================
-    # IF TARGET NOT COMPLETED
+    # TARGET NOT COMPLETED
     # =================================================
+
     if approved_today < target_now:
 
         if pending_users > 20:
@@ -255,9 +268,11 @@ def get_dynamic_delay():
     # =================================================
     # TARGET COMPLETED
     # =================================================
+
     else:
 
         # DAY
+
         if 6 <= current_hour < 13:
 
             return random.choice([
@@ -268,6 +283,7 @@ def get_dynamic_delay():
             ])
 
         # EVENING
+
         elif 13 <= current_hour < 24:
 
             return random.choice([
@@ -279,6 +295,7 @@ def get_dynamic_delay():
             ])
 
         # NIGHT
+
         else:
 
             return random.choice([
@@ -291,6 +308,7 @@ def get_dynamic_delay():
 # =====================================================
 # CHANNEL WORKER
 # =====================================================
+
 async def channel_worker(
     channel_id,
     context
@@ -310,6 +328,7 @@ async def channel_worker(
         # =============================================
         # EMPTY QUEUE
         # =============================================
+
         if not queue:
 
             await asyncio.sleep(30)
@@ -319,6 +338,7 @@ async def channel_worker(
         # =============================================
         # DAILY LIMIT
         # =============================================
+
         if approved_today >= daily_limit:
 
             print(
@@ -335,6 +355,7 @@ async def channel_worker(
         # =============================================
         # GET USER
         # =============================================
+
         data = queue.pop(0)
 
         save_database()
@@ -346,6 +367,7 @@ async def channel_worker(
         # =============================================
         # RANDOM DELAY
         # =============================================
+
         delay = get_dynamic_delay()
 
         minutes = round(
@@ -366,6 +388,7 @@ async def channel_worker(
         # =============================================
         # APPROVE USER
         # =============================================
+
         try:
 
             await context.bot.approve_chat_join_request(
@@ -412,6 +435,7 @@ async def channel_worker(
 # =====================================================
 # START ALL WORKERS
 # =====================================================
+
 async def start_all_workers(context):
 
     for channel_id in channel_queues.keys():
@@ -432,6 +456,7 @@ async def start_all_workers(context):
 # =====================================================
 # JOIN REQUEST HANDLER
 # =====================================================
+
 async def handle_request(
     update: Update,
     context: ContextTypes.DEFAULT_TYPE
@@ -463,6 +488,7 @@ async def handle_request(
     # =============================================
     # CREATE QUEUE
     # =============================================
+
     if channel_id not in channel_queues:
 
         channel_queues[channel_id] = []
@@ -470,6 +496,7 @@ async def handle_request(
     # =============================================
     # ADD USER
     # =============================================
+
     channel_queues[channel_id].append({
 
         "user_id": user_id,
@@ -485,6 +512,7 @@ async def handle_request(
     # =============================================
     # START WORKER
     # =============================================
+
     if channel_id not in running_workers:
 
         running_workers.add(channel_id)
@@ -501,6 +529,7 @@ async def handle_request(
 # =====================================================
 # START COMMAND
 # =====================================================
+
 async def start_command(
     update: Update,
     context: ContextTypes.DEFAULT_TYPE
@@ -536,6 +565,7 @@ async def start_command(
 # =====================================================
 # MAIN
 # =====================================================
+
 load_database()
 
 app = (
@@ -560,6 +590,7 @@ app.add_handler(
 # =====================================================
 # STARTUP
 # =====================================================
+
 async def on_startup(app):
 
     print(
@@ -574,6 +605,7 @@ app.post_init = on_startup
 # =====================================================
 # RUN BOT
 # =====================================================
+
 app.run_polling(
     drop_pending_updates=False,
     close_loop=False,
@@ -583,4 +615,3 @@ app.run_polling(
     connect_timeout=60,
     pool_timeout=60,
 )
-```
