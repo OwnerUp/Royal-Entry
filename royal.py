@@ -1,5 +1,7 @@
 import random
 import asyncio
+import json
+import os
 
 from datetime import datetime, time
 from zoneinfo import ZoneInfo
@@ -29,14 +31,17 @@ DAILY_MIN = 60
 DAILY_MAX = 90
 
 # =====================================================
+# DATABASE FILE
+# =====================================================
+DB_FILE = "queue_data.json"
+
+# =====================================================
 # STORAGE
 # =====================================================
 channel_queues = {}
 running_workers = set()
 
 approved_today = 0
-approved_users = set()
-
 daily_limit = random.randint(
     DAILY_MIN,
     DAILY_MAX
@@ -47,29 +52,97 @@ last_reset_date = datetime.now(
 ).date()
 
 # =====================================================
+# LOAD DATABASE
+# =====================================================
+def load_database():
+
+    global channel_queues
+    global approved_today
+    global daily_limit
+
+    if not os.path.exists(DB_FILE):
+
+        save_database()
+
+    try:
+
+        with open(
+            DB_FILE,
+            "r",
+            encoding="utf-8"
+        ) as f:
+
+            data = json.load(f)
+
+            channel_queues = data.get(
+                "queues",
+                {}
+            )
+
+            approved_today = data.get(
+                "approved_today",
+                0
+            )
+
+            daily_limit = data.get(
+                "daily_limit",
+                random.randint(
+                    DAILY_MIN,
+                    DAILY_MAX
+                )
+            )
+
+        print("✅ Database Loaded")
+
+    except Exception as e:
+
+        print(f"❌ DB Load Error: {e}")
+
+# =====================================================
+# SAVE DATABASE
+# =====================================================
+def save_database():
+
+    data = {
+
+        "queues": channel_queues,
+
+        "approved_today": approved_today,
+
+        "daily_limit": daily_limit
+
+    }
+
+    with open(
+        DB_FILE,
+        "w",
+        encoding="utf-8"
+    ) as f:
+
+        json.dump(
+            data,
+            f,
+            indent=4
+        )
+
+# =====================================================
 # RESET DAILY
 # 5 AM - 6 AM
 # =====================================================
 def reset_daily():
 
     global approved_today
-    global approved_users
     global daily_limit
     global last_reset_date
 
     now = datetime.now(IST)
 
-    reset_start = time(5, 0)
-    reset_end = time(6, 0)
-
     if (
-        reset_start <= now.time() <= reset_end
+        5 <= now.hour <= 6
         and now.date() != last_reset_date
     ):
 
         approved_today = 0
-
-        approved_users.clear()
 
         daily_limit = random.randint(
             DAILY_MIN,
@@ -78,9 +151,12 @@ def reset_daily():
 
         last_reset_date = now.date()
 
+        save_database()
+
         print(
             f"🔄 Daily Reset "
-            f"| New Limit: {daily_limit}"
+            f"| New Limit: "
+            f"{daily_limit}"
         )
 
 # =====================================================
@@ -147,9 +223,23 @@ async def channel_worker(
 
     global approved_today
 
-    while channel_queues[channel_id]:
+    while True:
 
         reset_daily()
+
+        queue = channel_queues.get(
+            str(channel_id),
+            []
+        )
+
+        # =============================================
+        # EMPTY QUEUE
+        # =============================================
+        if not queue:
+
+            await asyncio.sleep(30)
+
+            continue
 
         # =============================================
         # DAILY LIMIT
@@ -157,8 +247,10 @@ async def channel_worker(
         if approved_today >= daily_limit:
 
             print(
-                f"🚫 Daily Limit Reached "
-                f"{approved_today}/{daily_limit}"
+                f"🚫 Daily Limit "
+                f"Reached "
+                f"{approved_today}/"
+                f"{daily_limit}"
             )
 
             await asyncio.sleep(600)
@@ -168,29 +260,13 @@ async def channel_worker(
         # =============================================
         # GET USER
         # =============================================
-        data = channel_queues[
-            channel_id
-        ].pop(0)
+        data = queue.pop(0)
+
+        save_database()
 
         user_id = data["user_id"]
         user_name = data["user_name"]
         channel_name = data["channel_name"]
-
-        # =============================================
-        # DUPLICATE PROTECTION
-        # =============================================
-        unique_key = (
-            f"{channel_id}_{user_id}"
-        )
-
-        if unique_key in approved_users:
-
-            print(
-                f"⚠️ Duplicate Skipped "
-                f"{user_name}"
-            )
-
-            continue
 
         # =============================================
         # RANDOM DELAY
@@ -204,7 +280,8 @@ async def channel_worker(
 
         print(
             f"⏳ [{channel_name}] "
-            f"{user_name} waiting "
+            f"{user_name} "
+            f"waiting "
             f"{minutes} min"
         )
 
@@ -216,41 +293,68 @@ async def channel_worker(
         try:
 
             await context.bot.approve_chat_join_request(
-                chat_id=channel_id,
+                chat_id=int(channel_id),
                 user_id=user_id
-            )
-
-            approved_users.add(
-                unique_key
             )
 
             approved_today += 1
 
+            save_database()
+
             print(
                 f"✅ Approved "
                 f"{user_name} "
-                f"in {channel_name} "
-                f"| Today: "
+                f"in "
+                f"{channel_name} "
+                f"| Today "
                 f"{approved_today}/"
                 f"{daily_limit}"
             )
 
         except Exception as e:
 
-            print(
-                f"❌ Error "
-                f"in {channel_name}: "
-                f"{e}"
+            error_text = str(e)
+
+            # =========================================
+            # USER ALREADY JOINED
+            # =========================================
+            if (
+                "USER_ALREADY_PARTICIPANT"
+                in error_text.upper()
+            ):
+
+                print(
+                    f"⚠️ Already Joined: "
+                    f"{user_name}"
+                )
+
+            else:
+
+                print(
+                    f"❌ Error in "
+                    f"{channel_name}: "
+                    f"{e}"
+                )
+
+# =====================================================
+# START ALL WORKERS
+# =====================================================
+async def start_all_workers(context):
+
+    for channel_id in channel_queues.keys():
+
+        if channel_id not in running_workers:
+
+            running_workers.add(channel_id)
+
+            asyncio.create_task(
+
+                channel_worker(
+                    channel_id,
+                    context
+                )
+
             )
-
-    running_workers.remove(
-        channel_id
-    )
-
-    print(
-        f"🛑 Worker stopped "
-        f"for {channel_id}"
-    )
 
 # =====================================================
 # JOIN REQUEST HANDLER
@@ -265,7 +369,7 @@ async def handle_request(
         .from_user
     )
 
-    channel = (
+    chat = (
         update.chat_join_request
         .chat
     )
@@ -273,51 +377,52 @@ async def handle_request(
     user_id = user.id
     user_name = user.full_name
 
-    channel_id = channel.id
-    channel_name = channel.title
+    channel_id = str(chat.id)
+    channel_name = chat.title
 
     print(
         f"📥 New Request: "
-        f"{user_name} -> "
+        f"{user_name} "
+        f"-> "
         f"{channel_name}"
     )
 
     # =============================================
-    # CREATE CHANNEL QUEUE
+    # CREATE QUEUE
     # =============================================
     if channel_id not in channel_queues:
 
-        channel_queues[
-            channel_id
-        ] = []
+        channel_queues[channel_id] = []
 
     # =============================================
     # ADD USER
     # =============================================
-    channel_queues[
-        channel_id
-    ].append({
+    channel_queues[channel_id].append({
 
         "user_id": user_id,
+
         "user_name": user_name,
+
         "channel_name": channel_name
 
     })
+
+    save_database()
 
     # =============================================
     # START WORKER
     # =============================================
     if channel_id not in running_workers:
 
-        running_workers.add(
-            channel_id
-        )
+        running_workers.add(channel_id)
 
         asyncio.create_task(
+
             channel_worker(
                 channel_id,
                 context
             )
+
         )
 
 # =====================================================
@@ -328,13 +433,18 @@ async def start_command(
     context: ContextTypes.DEFAULT_TYPE
 ):
 
+    user_name = update.effective_user.first_name
+
     await update.message.reply_text(
-        "Hello Sir 👋"
+        f"Hello {user_name} Sir 👋\n"
+        f"I hope you enjoy your day ✨"
     )
 
 # =====================================================
-# START BOT
+# MAIN
 # =====================================================
+load_database()
+
 app = (
     ApplicationBuilder()
     .token(TOKEN)
@@ -354,12 +464,25 @@ app.add_handler(
     )
 )
 
-print(
-    "🚀 Smart Human-Like Multi-Channel Bot Started..."
-)
+# =====================================================
+# STARTUP
+# =====================================================
+async def on_startup(app):
 
+    print(
+        "🚀 Persistent Queue "
+        "Bot Started..."
+    )
+
+    await start_all_workers(app)
+
+app.post_init = on_startup
+
+# =====================================================
+# RUN BOT
+# =====================================================
 app.run_polling(
-    drop_pending_updates=True,
+    drop_pending_updates=False,
     close_loop=False,
     timeout=60,
     read_timeout=60,
