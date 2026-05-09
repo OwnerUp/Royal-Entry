@@ -20,14 +20,14 @@ from telegram.ext import (
 TOKEN = "8762342325:AAEB5kalMTloqqeTySjUKxjAeKDJpsAzy4U"
 
 # =====================================================
-# INDIA TIMEZONE
+# TIMEZONE
 # =====================================================
 IST = ZoneInfo("Asia/Kolkata")
 
 # =====================================================
 # DAILY LIMIT
 # =====================================================
-DAILY_MIN = 60
+DAILY_MIN = 70
 DAILY_MAX = 90
 
 # =====================================================
@@ -42,6 +42,7 @@ channel_queues = {}
 running_workers = set()
 
 approved_today = 0
+
 daily_limit = random.randint(
     DAILY_MIN,
     DAILY_MAX
@@ -127,7 +128,6 @@ def save_database():
 
 # =====================================================
 # RESET DAILY
-# 5 AM - 6 AM
 # =====================================================
 def reset_daily():
 
@@ -160,7 +160,20 @@ def reset_daily():
         )
 
 # =====================================================
-# SMART DELAY SYSTEM
+# TOTAL QUEUE COUNT
+# =====================================================
+def total_pending_users():
+
+    total = 0
+
+    for queue in channel_queues.values():
+
+        total += len(queue)
+
+    return total
+
+# =====================================================
+# SMART ADAPTIVE DELAY
 # =====================================================
 def get_dynamic_delay():
 
@@ -168,50 +181,110 @@ def get_dynamic_delay():
 
     current_hour = now.hour
 
-    # =================================================
-    # FAST MODE
-    # 6 AM -> 1 PM
-    # =================================================
-    if 6 <= current_hour < 13:
+    pending_users = total_pending_users()
 
-        if approved_today < 40:
+    # =================================================
+    # TARGET SYSTEM
+    # =================================================
+    if current_hour < 13:
+
+        target_now = 40
+
+    elif current_hour < 18:
+
+        target_now = int(
+            daily_limit * 0.70
+        )
+
+    elif current_hour < 22:
+
+        target_now = int(
+            daily_limit * 0.90
+        )
+
+    else:
+
+        target_now = daily_limit
+
+    # =================================================
+    # BEHIND TARGET
+    # =================================================
+    if approved_today < target_now:
+
+        # =============================================
+        # MANY USERS PENDING
+        # =============================================
+        if pending_users > 20:
 
             return random.choice([
-                120,   # 2m
-                180,   # 3m
-                240,   # 4m
-                300,   # 5m
-                420,   # 7m
-                600,   # 10m
+                60,
+                120,
+                180,
+                240,
+                300,
+            ])
+
+        elif pending_users > 10:
+
+            return random.choice([
+                120,
+                180,
+                240,
+                300,
+                420,
+            ])
+
+        else:
+
+            return random.choice([
+                180,
+                240,
+                300,
+                420,
+                600,
             ])
 
     # =================================================
-    # MEDIUM MODE
-    # 1 PM -> 12 AM
-    # =================================================
-    elif 13 <= current_hour < 24:
-
-        return random.choice([
-            900,    # 15m
-            1200,   # 20m
-            1800,   # 30m
-            2400,   # 40m
-            2700,   # 45m
-            3600,   # 60m
-        ])
-
-    # =================================================
-    # NIGHT MODE
-    # 12 AM -> 5 AM
+    # TARGET ACHIEVED
     # =================================================
     else:
 
-        return random.choice([
-            3600,   # 1h
-            5400,   # 1.5h
-            7200,   # 2h
-            10800,  # 3h
-        ])
+        # =============================================
+        # DAY MODE
+        # =============================================
+        if 6 <= current_hour < 13:
+
+            return random.choice([
+                300,
+                420,
+                600,
+                900,
+            ])
+
+        # =============================================
+        # EVENING MODE
+        # =============================================
+        elif 13 <= current_hour < 24:
+
+            return random.choice([
+                900,
+                1200,
+                1800,
+                2400,
+                3600,
+            ])
+
+        # =============================================
+        # NIGHT MODE
+        # =============================================
+        else:
+
+            return random.choice([
+                3600,
+                5400,
+                7200,
+                10800,
+            ])
 
 # =====================================================
 # CHANNEL WORKER
@@ -269,7 +342,7 @@ async def channel_worker(
         channel_name = data["channel_name"]
 
         # =============================================
-        # RANDOM DELAY
+        # DYNAMIC DELAY
         # =============================================
         delay = get_dynamic_delay()
 
@@ -280,9 +353,10 @@ async def channel_worker(
 
         print(
             f"⏳ [{channel_name}] "
-            f"{user_name} "
-            f"waiting "
-            f"{minutes} min"
+            f"{user_name} waiting "
+            f"{minutes} min "
+            f"| Queue: "
+            f"{total_pending_users()}"
         )
 
         await asyncio.sleep(delay)
@@ -315,9 +389,6 @@ async def channel_worker(
 
             error_text = str(e)
 
-            # =========================================
-            # USER ALREADY JOINED
-            # =========================================
             if (
                 "USER_ALREADY_PARTICIPANT"
                 in error_text.upper()
@@ -470,8 +541,8 @@ app.add_handler(
 async def on_startup(app):
 
     print(
-        "🚀 Persistent Queue "
-        "Bot Started..."
+        "🚀 Adaptive Smart "
+        "Queue Bot Started..."
     )
 
     await start_all_workers(app)
