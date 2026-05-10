@@ -1,6 +1,3 @@
-# Royal Entry Bot — Fixed Multi-Channel Version (v5.0)
-
-```python
 import random
 import asyncio
 import json
@@ -69,7 +66,6 @@ last_reset_date = datetime.now(IST).date()
 # LOAD DATABASE
 # =====================================================
 
-
 def load_database():
 
     global channel_queues
@@ -108,7 +104,6 @@ def load_database():
 # SAVE DATABASE
 # =====================================================
 
-
 def save_database():
 
     data = {
@@ -133,7 +128,6 @@ def save_database():
 # =====================================================
 # RESET DAILY
 # =====================================================
-
 
 def reset_daily():
 
@@ -169,7 +163,6 @@ def reset_daily():
 # TOTAL PENDING USERS
 # =====================================================
 
-
 def total_pending_users():
 
     total = 0
@@ -183,7 +176,6 @@ def total_pending_users():
 # =====================================================
 # SMART DELAY SYSTEM
 # =====================================================
-
 
 def get_dynamic_delay(channel_id):
 
@@ -202,10 +194,6 @@ def get_dynamic_delay(channel_id):
     daily_limit = stats[
         "daily_limit"
     ]
-
-    # =================================================
-    # TARGET SYSTEM
-    # =================================================
 
     if current_hour < 13:
 
@@ -226,10 +214,6 @@ def get_dynamic_delay(channel_id):
     else:
 
         target_now = daily_limit
-
-    # =================================================
-    # TARGET NOT COMPLETED
-    # =================================================
 
     if approved_today < target_now:
 
@@ -263,13 +247,7 @@ def get_dynamic_delay(channel_id):
                 600,
             ])
 
-    # =================================================
-    # TARGET COMPLETED
-    # =================================================
-
     else:
-
-        # DAY
 
         if 6 <= current_hour < 13:
 
@@ -280,8 +258,6 @@ def get_dynamic_delay(channel_id):
                 900,
             ])
 
-        # EVENING
-
         elif 13 <= current_hour < 24:
 
             return random.choice([
@@ -291,8 +267,6 @@ def get_dynamic_delay(channel_id):
                 2400,
                 3600,
             ])
-
-        # NIGHT
 
         else:
 
@@ -306,7 +280,6 @@ def get_dynamic_delay(channel_id):
 # =====================================================
 # CHANNEL WORKER
 # =====================================================
-
 
 async def channel_worker(
     channel_id,
@@ -324,19 +297,11 @@ async def channel_worker(
 
         stats = channel_stats[channel_id]
 
-        # =============================================
-        # EMPTY QUEUE
-        # =============================================
-
         if not queue:
 
             await asyncio.sleep(30)
 
             continue
-
-        # =============================================
-        # DAILY LIMIT
-        # =============================================
 
         if (
             stats["approved_today"]
@@ -355,10 +320,6 @@ async def channel_worker(
 
             continue
 
-        # =============================================
-        # GET USER
-        # =============================================
-
         data = queue.pop(0)
 
         save_database()
@@ -366,10 +327,6 @@ async def channel_worker(
         user_id = data["user_id"]
         user_name = data["user_name"]
         channel_name = data["channel_name"]
-
-        # =============================================
-        # RANDOM DELAY
-        # =============================================
 
         delay = get_dynamic_delay(channel_id)
 
@@ -387,10 +344,6 @@ async def channel_worker(
         )
 
         await asyncio.sleep(delay)
-
-        # =============================================
-        # APPROVE USER
-        # =============================================
 
         try:
 
@@ -413,7 +366,6 @@ async def channel_worker(
                 f'{stats["daily_limit"]}'
             )
 
-            # MEMORY CLEANUP
             if not queue:
                 channel_queues[channel_id] = []
 
@@ -454,7 +406,6 @@ async def channel_worker(
 # START ALL WORKERS
 # =====================================================
 
-
 async def start_all_workers(context):
 
     for channel_id in channel_queues.keys():
@@ -475,7 +426,6 @@ async def start_all_workers(context):
 # =====================================================
 # JOIN REQUEST HANDLER
 # =====================================================
-
 
 async def handle_request(
     update: Update,
@@ -505,17 +455,9 @@ async def handle_request(
         f"{channel_name}"
     )
 
-    # =============================================
-    # CREATE QUEUE
-    # =============================================
-
     if channel_id not in channel_queues:
 
         channel_queues[channel_id] = []
-
-    # =============================================
-    # CREATE CHANNEL STATS
-    # =============================================
 
     if channel_id not in channel_stats:
 
@@ -529,10 +471,6 @@ async def handle_request(
             )
         }
 
-    # =============================================
-    # DUPLICATE CHECK
-    # =============================================
-
     already_exists = any(
         x["user_id"] == user_id
         for x in channel_queues[channel_id]
@@ -540,10 +478,6 @@ async def handle_request(
 
     if already_exists:
         return
-
-    # =============================================
-    # ADD USER
-    # =============================================
 
     channel_queues[channel_id].append({
 
@@ -556,10 +490,6 @@ async def handle_request(
     })
 
     save_database()
-
-    # =============================================
-    # START WORKER
-    # =============================================
 
     if channel_id not in running_workers:
 
@@ -577,7 +507,6 @@ async def handle_request(
 # =====================================================
 # START COMMAND
 # =====================================================
-
 
 async def start_command(
     update: Update,
@@ -640,7 +569,6 @@ app.add_handler(
 # STARTUP
 # =====================================================
 
-
 async def on_startup(app):
 
     print(
@@ -665,32 +593,3 @@ app.run_polling(
     connect_timeout=60,
     pool_timeout=60,
 )
-
-```
-
-# What Was Fixed
-
-✅ Per-channel daily limit
-
-✅ One channel full hone par doosre channels continue rahenge
-
-✅ FloodWait handling added
-
-✅ Duplicate join request protection
-
-✅ Memory cleanup improved
-
-✅ Better multi-channel architecture
-
-✅ Railway stable support
-
-✅ Smart delay now works per channel
-
-# Result
-
-Ab:
-
-* CRICKET channel limit hit karega → sirf wahi rukega
-* MOVIE channel continue karega
-* STOCK channel continue karega
-* Bot kabhi fully stop nahi hoga
